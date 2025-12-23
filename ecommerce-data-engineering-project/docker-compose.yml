@@ -1,0 +1,116 @@
+version: '3.8'
+
+services:
+  # Servicio principal del proyecto ETL
+  ecommerce-etl:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ecommerce_etl_project
+    image: ecommerce-etl:latest
+    
+    # Variables de entorno
+    environment:
+      - PYTHONUNBUFFERED=1
+      - SPARK_LOCAL_IP=127.0.0.1
+      - PYSPARK_PYTHON=python3
+      - PYSPARK_DRIVER_PYTHON=python3
+    
+    # Volúmenes para persistir datos
+    volumes:
+      - ./data:/app/data
+      - ./warehouse:/app/warehouse
+      - ./notebooks:/app/notebooks
+      - ./docs:/app/docs
+    
+    # Comando por defecto
+    command: >
+      python -c "
+      print('╔════════════════════════════════════════════════════════════╗');
+      print('║   PROYECTO ETL ECOMMERCE - CONTENEDOR INICIADO             ║');
+      print('║   Pandas & PySpark - Modelo Dimensional                   ║');
+      print('╚════════════════════════════════════════════════════════════╝');
+      print('\nComandos disponibles:\n');
+      print('1. Ejecutar ETL con Pandas:');
+      print('   docker-compose exec ecommerce-etl python etl_warehouse.py\n');
+      print('2. Ejecutar ETL con PySpark:');
+      print('   docker-compose exec ecommerce-etl python etl_pyspark.py\n');
+      print('3. Ver consultas del warehouse:');
+      print('   docker-compose exec ecommerce-etl python warehouse/consultas_warehouse.py\n');
+      print('4. Generar resumen ejecutivo:');
+      print('   docker-compose exec ecommerce-etl python resumen_ejecutivo.py\n');
+      print('5. Shell interactivo:');
+      print('   docker-compose exec ecommerce-etl bash\n');
+      print('6. Jupyter Notebook:');
+      print('   Accede a http://localhost:8888\n');
+      "
+    
+    # Mantener el contenedor ejecutándose
+    tty: true
+    stdin_open: true
+    
+    # Puertos expuestos
+    ports:
+      - "8888:8888"  # Jupyter Notebook
+      - "4040:4040"  # Spark UI
+    
+    # Red
+    networks:
+      - etl-network
+    
+    # Healthcheck
+    healthcheck:
+      test: ["CMD", "python3", "--version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Servicio opcional: Jupyter Notebook
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ecommerce_jupyter
+    image: ecommerce-etl:latest
+    
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+    
+    volumes:
+      - ./data:/app/data
+      - ./warehouse:/app/warehouse
+      - ./notebooks:/app/notebooks
+      - ./docs:/app/docs
+    
+    command: >
+      jupyter notebook 
+      --ip=0.0.0.0 
+      --port=8888 
+      --no-browser 
+      --allow-root 
+      --NotebookApp.token='' 
+      --NotebookApp.password=''
+    
+    ports:
+      - "8889:8888"
+    
+    networks:
+      - etl-network
+    
+    depends_on:
+      - ecommerce-etl
+
+# Redes
+networks:
+  etl-network:
+    driver: bridge
+    name: ecommerce-etl-network
+
+# Volúmenes persistentes (opcional)
+volumes:
+  data-volume:
+    driver: local
+  warehouse-volume:
+    driver: local
+
