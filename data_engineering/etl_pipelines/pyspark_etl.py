@@ -10,24 +10,29 @@ from typing import Any, Optional
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from config.logging_config import PYSPARK_ETL_LOGGER, get_step_logger, setup_logging
+from config.settings import Settings
 
 
 def create_spark_session() -> SparkSession:
     """Crea o obtiene la sesión Spark para el ETL de eCommerce."""
-    return (
+    logger = get_step_logger(PYSPARK_ETL_LOGGER, "create_spark_session")
+    spark = (
         SparkSession.builder.appName("Ecommerce ETL")
         .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
         .getOrCreate()
     )
+    logger.info("Sesión Spark creada")
+    return spark
 
 
 def load_raw_data(spark: SparkSession, path: str | Path) -> DataFrame:
     """Carga el CSV procesado (salida de pandas_etl) con cabecera e inferencia de schema."""
+    logger = get_step_logger(PYSPARK_ETL_LOGGER, "load_raw_data")
     path = str(Path(path))
     df = spark.read.csv(path, header=True, inferSchema=True)
-    logger.info("Datos cargados desde %s: %s filas", path, df.count())
+    count = df.count()
+    logger.info("Datos cargados desde %s: %s filas", path, count)
     return df
 
 
@@ -36,7 +41,7 @@ def transform_data(df: DataFrame) -> DataFrame:
     Transformaciones ligeras en Spark. Los datos ya vienen limpios de Pandas;
     aquí solo aseguramos tipos o columnas necesarias para el modelo dimensional.
     """
-    # Asegurar que order_date sea fecha para dim_date y fact
+    logger = get_step_logger(PYSPARK_ETL_LOGGER, "transform_data")
     df = df.withColumn("order_date", F.to_date(F.col("order_date")))
     if "delivery_date" in df.columns:
         df = df.withColumn("delivery_date", F.to_date(F.col("delivery_date")))
@@ -49,15 +54,17 @@ def build_dimensional_tables(df: DataFrame) -> dict[str, DataFrame]:
     Construye dim_products, dim_customers y dim_date a partir del dataset limpio.
     Devuelve un diccionario {nombre_tabla: DataFrame}.
     """
-    # Dim Products: una fila por product_id
+    logger_products = get_step_logger(PYSPARK_ETL_LOGGER, "build_dim_products")
+    logger_customers = get_step_logger(PYSPARK_ETL_LOGGER, "build_dim_customers")
+    logger_date = get_step_logger(PYSPARK_ETL_LOGGER, "build_dim_date")
+
     dim_products = (
         df.select("product_id", "product_name", "category", "subcategory", "product_brand")
         .distinct()
         .orderBy("product_id")
     )
-    logger.info("dim_products: %s filas", dim_products.count())
+    logger_products.info("dim_products: %s filas", dim_products.count())
 
-    # Dim Customers: una fila por customer_id
     dim_customers = (
         df.select(
             "customer_id",
@@ -71,9 +78,8 @@ def build_dimensional_tables(df: DataFrame) -> dict[str, DataFrame]:
         .distinct()
         .orderBy("customer_id")
     )
-    logger.info("dim_customers: %s filas", dim_customers.count())
+    logger_customers.info("dim_customers: %s filas", dim_customers.count())
 
-    # Dim Date: una fila por fecha distinta (order_date), con atributos temporales
     dim_date = (
         df.select("order_date")
         .distinct()
@@ -86,7 +92,7 @@ def build_dimensional_tables(df: DataFrame) -> dict[str, DataFrame]:
         .select("date_key", "year", "month", "day", "week_of_year", "quarter")
         .orderBy("date_key")
     )
-    logger.info("dim_date: %s filas", dim_date.count())
+    logger_date.info("dim_date: %s filas", dim_date.count())
 
     return {
         "dim_products": dim_products,
@@ -100,6 +106,7 @@ def build_fact_tables(df: DataFrame) -> dict[str, DataFrame]:
     Construye fact_sales: una fila por línea de pedido (order_id + product_id)
     con claves foráneas y métricas.
     """
+    logger = get_step_logger(PYSPARK_ETL_LOGGER, "build_fact_tables")
     fact_sales = df.select(
         "order_id",
         "customer_id",
@@ -121,7 +128,7 @@ def build_fact_tables(df: DataFrame) -> dict[str, DataFrame]:
 
 def write_to_warehouse(
     tables: dict[str, DataFrame],
-    base_path: str | Path = "warehouse",
+    base_path: str | Path,
     format: str = "parquet",
     connection_url: Optional[str] = None,
 ) -> None:
@@ -129,15 +136,21 @@ def write_to_warehouse(
     Escribe las tablas en el warehouse.
     Si connection_url está definido, usa JDBC (NeonDB); si no, escribe en base_path como Parquet/CSV.
     """
+    logger = get_step_logger(PYSPARK_ETL_LOGGER, "write_to_warehouse")
     base_path = Path(base_path)
     base_path.mkdir(parents=True, exist_ok=True)
 
     if connection_url:
+        Settings.validate_db_config()
         for name, table_df in tables.items():
-            table_df.write.format("jdbc").option("url", connection_url).option(
-                "dbtable", name
-            ).mode("overwrite").save()
-            logger.info("Escrito en warehouse (JDBC): %s", name)
+            try:
+                table_df.write.format("jdbc").option("url", connection_url).option(
+                    "dbtable", name
+                ).mode("overwrite").save()
+                logger.info("Escrito en warehouse (JDBC): %s", name)
+            except Exception as e:
+                logger.error("Error JDBC al escribir %s: %s", name, e)
+                raise
     else:
         for name, table_df in tables.items():
             out_path = base_path / name
@@ -146,31 +159,46 @@ def write_to_warehouse(
 
 
 def run_pipeline(
-    input_path: str | Path = "data/processed/ecommerce_clean.csv",
-    warehouse_path: str | Path = "warehouse",
+    input_path: str | Path | None = None,
+    warehouse_path: str | Path | None = None,
     connection_url: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Ejecuta el pipeline completo PySpark:
     load -> transform -> build_dimensional_tables -> build_fact_tables -> write_to_warehouse.
-    Devuelve un diccionario con los DataFrames generados (para pruebas o inspección).
+    Paths por defecto desde Settings. connection_url desde Settings.get_jdbc_url() si no se pasa.
     """
-    spark = create_spark_session()
-    df = load_raw_data(spark, input_path)
-    df = transform_data(df)
+    setup_logging(log_file=Settings.LOG_DIR / "pyspark_etl.log", log_to_console=True)
+    run_logger = get_step_logger(PYSPARK_ETL_LOGGER, "run_pipeline")
 
-    dims = build_dimensional_tables(df)
-    facts = build_fact_tables(df)
-    all_tables = {**dims, **facts}
+    input_path = Path(input_path) if input_path is not None else Settings.PATH_PROCESSED_CSV
+    warehouse_path = Path(warehouse_path) if warehouse_path is not None else Settings.WAREHOUSE_DIR
+    if connection_url is None:
+        connection_url = Settings.get_jdbc_url() or None
+    if connection_url:
+        Settings.validate_db_config()
 
-    write_to_warehouse(
-        all_tables,
-        base_path=warehouse_path,
-        format="parquet",
-        connection_url=connection_url,
-    )
-    logger.info("Pipeline PySpark completado")
-    return all_tables
+    run_logger.info("Inicio pipeline PySpark: %s -> %s", input_path, warehouse_path or "JDBC")
+    try:
+        spark = create_spark_session()
+        df = load_raw_data(spark, input_path)
+        df = transform_data(df)
+
+        dims = build_dimensional_tables(df)
+        facts = build_fact_tables(df)
+        all_tables = {**dims, **facts}
+
+        write_to_warehouse(
+            all_tables,
+            base_path=warehouse_path,
+            format="parquet",
+            connection_url=connection_url,
+        )
+        run_logger.info("Pipeline PySpark completado correctamente")
+        return all_tables
+    except Exception as e:
+        run_logger.error("Pipeline PySpark fallido: %s", e)
+        raise
 
 
 if __name__ == "__main__":

@@ -9,14 +9,16 @@ from typing import Optional
 
 import pandas as pd
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from config.logging_config import PANDAS_ETL_LOGGER, get_step_logger, setup_logging
+from config.settings import Settings
 
 
 def load_data(path: str | Path) -> pd.DataFrame:
     """Carga el dataset desde CSV."""
+    logger = get_step_logger(PANDAS_ETL_LOGGER, "load_data")
     path = Path(path)
     if not path.exists():
+        logger.error("Archivo no encontrado: %s", path)
         raise FileNotFoundError(f"No se encuentra el archivo: {path}")
     df = pd.read_csv(path)
     logger.info("Datos cargados: %s filas, %s columnas", len(df), len(df.columns))
@@ -25,6 +27,7 @@ def load_data(path: str | Path) -> pd.DataFrame:
 
 def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     """Limpieza general: nombres de columnas en minúsculas y con guión bajo."""
+    logger = get_step_logger(PANDAS_ETL_LOGGER, "clean_data")
     df = df.copy()
     df.columns = df.columns.str.lower().str.replace(" ", "_")
     logger.info("Columnas normalizadas: %s", list(df.columns))
@@ -37,6 +40,7 @@ def handle_missing_values(df: pd.DataFrame) -> pd.DataFrame:
     Filtra cantidades <= 0.
     Rellena numéricos con mediana y discount con 0.
     """
+    logger = get_step_logger(PANDAS_ETL_LOGGER, "handle_missing_values")
     df = df.copy()
     initial = len(df)
 
@@ -64,6 +68,7 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     Normaliza fechas (múltiples formatos) y customer_gender (Male/Female/Other).
     Rellena categorías y textos vacíos con 'Unknown'. Elimina filas sin order_date.
     """
+    logger = get_step_logger(PANDAS_ETL_LOGGER, "normalize_columns")
     df = df.copy()
 
     # Fechas
@@ -104,6 +109,7 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
     Feature engineering básico eCommerce: total_revenue, métricas de tiempo.
     Ajusta tipos numéricos: quantity entero; unit_price, total_amount, discount, total_revenue con 2 decimales.
     """
+    logger = get_step_logger(PANDAS_ETL_LOGGER, "feature_engineering")
     df = df.copy()
 
     df["total_revenue"] = df["quantity"] * df["unit_price"]
@@ -125,40 +131,59 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
 
 def validate_data_quality(df: pd.DataFrame) -> bool:
     """Valida que no queden nulos y que cantidades/precios sean coherentes."""
-    assert df.isnull().sum().sum() == 0, "Quedan valores nulos en el dataset"
-    assert (df["quantity"] > 0).all(), "Todas las cantidades deben ser positivas"
-    assert (df["unit_price"] >= 0).all(), "Los precios no pueden ser negativos"
+    logger = get_step_logger(PANDAS_ETL_LOGGER, "validate_data_quality")
+    try:
+        assert df.isnull().sum().sum() == 0, "Quedan valores nulos en el dataset"
+        assert (df["quantity"] > 0).all(), "Todas las cantidades deben ser positivas"
+        assert (df["unit_price"] >= 0).all(), "Los precios no pueden ser negativos"
+    except AssertionError as e:
+        logger.error("Validación fallida: %s", e)
+        raise
     logger.info("Validación de calidad: OK")
     return True
 
 
 def save_processed_data(df: pd.DataFrame, path: str | Path) -> None:
     """Guarda el dataset limpio en CSV (sin índice)."""
+    logger = get_step_logger(PANDAS_ETL_LOGGER, "save_processed_data")
     path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(path, index=False)
-    logger.info("Datos guardados en %s (%s filas)", path, len(df))
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(path, index=False)
+        logger.info("Datos guardados en %s (%s filas)", path, len(df))
+    except OSError as e:
+        logger.error("Error al guardar %s: %s", path, e)
+        raise
 
 
 def run_pipeline(
-    input_path: str | Path = "data/ecommerce_raw.csv",
-    output_path: Optional[str | Path] = None,
+    input_path: str | Path | None = None,
+    output_path: str | Path | None = None,
 ) -> pd.DataFrame:
     """
     Ejecuta el pipeline completo: load -> clean -> missing -> normalize -> features -> validate -> save.
+    Paths por defecto desde Settings (PATH_RAW_CSV, PATH_PROCESSED_CSV).
     """
-    if output_path is None:
-        output_path = Path("data/processed/ecommerce_clean.csv")
+    setup_logging(log_file=Settings.LOG_DIR / "pandas_etl.log", log_to_console=True)
+    run_logger = get_step_logger(PANDAS_ETL_LOGGER, "run_pipeline")
 
-    df = load_data(input_path)
-    df = clean_data(df)
-    df = handle_missing_values(df)
-    df = normalize_columns(df)
-    df = feature_engineering(df)
-    validate_data_quality(df)
-    save_processed_data(df, output_path)
-    return df
+    input_path = Path(input_path) if input_path is not None else Settings.PATH_RAW_CSV
+    output_path = Path(output_path) if output_path is not None else Settings.PATH_PROCESSED_CSV
 
+    run_logger.info("Inicio pipeline Pandas: %s -> %s", input_path, output_path)
+    try:
+        df = load_data(input_path)
+        df = clean_data(df)
+        df = handle_missing_values(df)
+        df = normalize_columns(df)
+        df = feature_engineering(df)
+        validate_data_quality(df)
+        save_processed_data(df, output_path)
+        run_logger.info("Pipeline Pandas completado correctamente")
+        return df
+    except Exception as e:
+        run_logger.error("Pipeline Pandas fallido: %s", e)
+        raise
 
 
 if __name__ == "__main__":

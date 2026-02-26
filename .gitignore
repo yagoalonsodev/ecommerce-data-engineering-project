@@ -33,6 +33,7 @@ warehouse/
 Thumbs.db
 
 # Logs
+logs/
 *.log
 
 # Docker
