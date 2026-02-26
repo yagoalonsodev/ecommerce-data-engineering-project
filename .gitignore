@@ -38,3 +38,6 @@ Thumbs.db
 # Docker
 .dockerignore
 
+
+# Carpeta oculta del proyecto
+ocult/

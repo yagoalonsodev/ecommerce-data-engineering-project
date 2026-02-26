@@ -1,0 +1,6 @@
+# Data processing
+pandas>=2.0.0
+pyspark>=3.5.0
+
+# Utilidades (opcional, para ETL)
+python-dotenv>=1.0.0

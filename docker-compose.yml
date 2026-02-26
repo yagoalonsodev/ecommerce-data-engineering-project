@@ -1,5 +1,54 @@
 version: '3.8'
 
+  # Servicio opcional: Jupyter Notebook
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ecommerce_jupyter
+    image: ecommerce-etl:latest
+    
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+    
+    volumes:
+      - ./data:/app/data
+      - ./warehouse:/app/warehouse
+      - ./notebooks:/app/notebooks
+      - ./docs:/app/docs
+    
+    command: >
+      jupyter notebook 
+      --ip=0.0.0.0 
+      --port=8888 
+      --no-browser 
+      --allow-root 
+      --NotebookApp.token='' 
+      --NotebookApp.password=''
+    
+    ports:
+      - "8889:8888"
+    
+    networks:
+      - etl-network
+    
+    depends_on:
+      - ecommerce-etl
+
+# Redes
+networks:
+  etl-network:
+    driver: bridge
+    name: ecommerce-etl-network
+
+# Volúmenes persistentes (opcional)
+volumes:
+  data-volume:
+    driver: local
+  warehouse-volume:
+    driver: local
+
+
 services:
   # Servicio principal del proyecto ETL
   ecommerce-etl:
@@ -65,52 +114,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
-  # Servicio opcional: Jupyter Notebook
-  jupyter:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: ecommerce_jupyter
-    image: ecommerce-etl:latest
-    
-    environment:
-      - JUPYTER_ENABLE_LAB=yes
-    
-    volumes:
-      - ./data:/app/data
-      - ./warehouse:/app/warehouse
-      - ./notebooks:/app/notebooks
-      - ./docs:/app/docs
-    
-    command: >
-      jupyter notebook 
-      --ip=0.0.0.0 
-      --port=8888 
-      --no-browser 
-      --allow-root 
-      --NotebookApp.token='' 
-      --NotebookApp.password=''
-    
-    ports:
-      - "8889:8888"
-    
-    networks:
-      - etl-network
-    
-    depends_on:
-      - ecommerce-etl
-
-# Redes
-networks:
-  etl-network:
-    driver: bridge
-    name: ecommerce-etl-network
-
-# Volúmenes persistentes (opcional)
-volumes:
-  data-volume:
-    driver: local
-  warehouse-volume:
-    driver: local
-
