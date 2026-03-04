@@ -81,6 +81,17 @@ services:
       retries: 3
       start_period: 40s
 
+  # Frontend React (Vite + Tailwind + Recharts)
+  frontend:
+    build: ./frontend
+    container_name: ecommerce_frontend
+    ports:
+      - "3000:5173"
+    depends_on:
+      - ecommerce-etl
+    networks:
+      - etl-network
+
 # Redes
 networks:
   etl-network:
