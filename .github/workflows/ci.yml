@@ -28,9 +28,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run pytest
+      - name: Run tests with coverage
         run: |
-          PYTHONPATH=. pytest backend/tests tests/etl -v --tb=short
+          PYTHONPATH=. pytest backend/tests tests/etl -v --tb=short \
+            --cov=backend --cov=data_engineering \
+            --cov-report=term-missing \
+            --no-cov-on-fail
         env:
-          # Sin DB real; los tests del backend usan mocks
           DATABASE_URL: ""
