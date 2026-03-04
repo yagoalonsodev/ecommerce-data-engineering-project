@@ -38,6 +38,16 @@ Plataforma de ingeniería de datos end-to-end para análisis eCommerce: pipeline
 
 ---
 
+## Vista del dashboard
+
+<p align="center">
+  <img src="docs/dashboard.png" alt="Dashboard de analytics en producción" width="900"/>
+</p>
+
+Dashboard de analytics en producción: KPIs, ventas por día, top productos y top clientes (React + Recharts + Tailwind).
+
+---
+
 ## 🏗 Arquitectura
 
 <p align="center">
