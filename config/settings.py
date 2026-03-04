@@ -7,6 +7,7 @@ No hardcodear valores sensibles; todo desde variables de entorno o defaults segu
 import os
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlparse
 
 _ROOT = Path(__file__).resolve().parent.parent
 try:
@@ -14,6 +15,16 @@ try:
     load_dotenv(_ROOT / ".env")
 except ImportError:
     pass
+# Fallback: cargar .env manualmente si existe (sin python-dotenv)
+_env_path = _ROOT / ".env"
+if _env_path.exists():
+    for _ln in _env_path.read_text(encoding="utf-8").splitlines():
+        _ln = _ln.strip()
+        if _ln and not _ln.startswith("#") and "=" in _ln:
+            _key, _, _val = _ln.partition("=")
+            _key, _val = _key.strip(), _val.strip().strip("'\"")
+            if _key and _key not in os.environ:
+                os.environ[_key] = _val
 
 
 def _env(key: str, default: str = "") -> str:
@@ -22,6 +33,26 @@ def _env(key: str, default: str = "") -> str:
 
 def _path_env(key: str, default: Path) -> Path:
     return Path(_env(key) or str(default))
+
+
+def _parse_pg_url(url: str) -> dict:
+    """Extrae user, password, host, port, dbname de una URL postgresql:// (ej. Neon)."""
+    if not url or not url.startswith("postgresql"):
+        return {}
+    p = urlparse(url)
+    if not p.netloc or not p.path:
+        return {}
+    # netloc = user:password@host:port
+    userinfo, _, hostport = p.netloc.rpartition("@")
+    if not userinfo or not hostport:
+        return {}
+    user, _, password = userinfo.partition(":")
+    if ":" in hostport:
+        host, port = hostport.rsplit(":", 1)
+    else:
+        host, port = hostport, "5432"
+    dbname = p.path.lstrip("/").split("?")[0]
+    return {"user": user, "password": password, "host": host, "port": port, "dbname": dbname}
 
 
 class Settings:
@@ -75,12 +106,36 @@ class Settings:
 
     @classmethod
     def get_jdbc_url(cls) -> str:
-        """URL JDBC para PySpark (write_to_warehouse)."""
+        """URL JDBC para PySpark (write_to_warehouse). Neon: añade ?sslmode=require."""
         if cls.DATABASE_JDBC_URL:
             return cls.DATABASE_JDBC_URL
+        parsed = _parse_pg_url(cls.DATABASE_URL) if cls.DATABASE_URL else {}
+        if parsed:
+            return (
+                f"jdbc:postgresql://{parsed['host']}:{parsed['port']}/{parsed['dbname']}"
+                "?sslmode=require"
+            )
         if cls.DB_HOST and cls.DB_NAME:
-            return f"jdbc:postgresql://{cls.DB_HOST}:{cls.DB_PORT}/{cls.DB_NAME}"
+            return f"jdbc:postgresql://{cls.DB_HOST}:{cls.DB_PORT}/{cls.DB_NAME}?sslmode=require"
         return ""
+
+    @classmethod
+    def get_jdbc_user(cls) -> str:
+        """Usuario para JDBC (PySpark). Desde DATABASE_URL o DB_USER."""
+        if cls.DATABASE_URL:
+            parsed = _parse_pg_url(cls.DATABASE_URL)
+            if parsed.get("user"):
+                return parsed["user"]
+        return cls.DB_USER or ""
+
+    @classmethod
+    def get_jdbc_password(cls) -> str:
+        """Contraseña para JDBC (PySpark). Desde DATABASE_URL o DB_PASSWORD."""
+        if cls.DATABASE_URL:
+            parsed = _parse_pg_url(cls.DATABASE_URL)
+            if "password" in parsed:
+                return parsed["password"]
+        return cls.DB_PASSWORD or ""
 
     # Variables requeridas cuando se usa DB con host/name por separado (Fase 2)
     REQUIRED_DB_ENV_VARS: list[str] = ["DB_HOST", "DB_NAME"]
@@ -100,15 +155,16 @@ class Settings:
     def validate_db_config(cls) -> None:
         """
         Valida que la config de DB esté lista antes de cualquier operación con la base (Fase 2).
-        Acepta: DATABASE_JDBC_URL definida, o bien DB_HOST y DB_NAME definidos.
-        Lanza ValueError si no hay ninguna de las dos opciones.
+        Acepta: DATABASE_URL (Neon), DATABASE_JDBC_URL, o bien DB_HOST y DB_NAME definidos.
         """
+        if cls.DATABASE_URL:
+            return
         if cls.DATABASE_JDBC_URL:
             return
         if cls.DB_HOST and cls.DB_NAME:
             return
         raise ValueError(
-            "Missing DB config for phase 2: set DATABASE_JDBC_URL or both DB_HOST and DB_NAME"
+            "Missing DB config for phase 2: set DATABASE_URL, DATABASE_JDBC_URL, or both DB_HOST and DB_NAME"
         )
 
 

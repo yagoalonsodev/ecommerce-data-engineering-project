@@ -4,6 +4,7 @@ Lee datos limpios de Pandas (data/processed/) y genera fact_sales, dim_products,
 """
 
 import logging
+import time
 from pathlib import Path
 from typing import Any, Optional
 
@@ -11,17 +12,23 @@ from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 
 from config.logging_config import PYSPARK_ETL_LOGGER, get_step_logger, setup_logging
+from config.observability import log_pipeline_metrics
 from config.settings import Settings
 
 
 def create_spark_session() -> SparkSession:
-    """Crea o obtiene la sesión Spark para el ETL de eCommerce."""
+    """Crea o obtiene la sesión Spark para el ETL de eCommerce. Incluye driver JDBC PostgreSQL (Neon)."""
     logger = get_step_logger(PYSPARK_ETL_LOGGER, "create_spark_session")
-    spark = (
+    builder = (
         SparkSession.builder.appName("Ecommerce ETL")
         .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
-        .getOrCreate()
     )
+    # Driver PostgreSQL para write_to_warehouse con NeonDB (Fase 2)
+    try:
+        builder = builder.config("spark.jars.packages", "org.postgresql:postgresql:42.7.3")
+    except Exception:
+        pass
+    spark = builder.getOrCreate()
     logger.info("Sesión Spark creada")
     return spark
 
@@ -142,11 +149,20 @@ def write_to_warehouse(
 
     if connection_url:
         Settings.validate_db_config()
+        jdbc_user = Settings.get_jdbc_user()
+        jdbc_password = Settings.get_jdbc_password()
         for name, table_df in tables.items():
             try:
-                table_df.write.format("jdbc").option("url", connection_url).option(
-                    "dbtable", name
-                ).mode("overwrite").save()
+                writer = (
+                    table_df.write.format("jdbc")
+                    .option("url", connection_url)
+                    .option("dbtable", name)
+                    .option("user", jdbc_user)
+                    .option("password", jdbc_password)
+                    .option("driver", "org.postgresql.Driver")
+                    .mode("overwrite")
+                )
+                writer.save()
                 logger.info("Escrito en warehouse (JDBC): %s", name)
             except Exception as e:
                 logger.error("Error JDBC al escribir %s: %s", name, e)
@@ -179,6 +195,7 @@ def run_pipeline(
         Settings.validate_db_config()
 
     run_logger.info("Inicio pipeline PySpark: %s -> %s", input_path, warehouse_path or "JDBC")
+    start_time = time.time()
     try:
         spark = create_spark_session()
         df = load_raw_data(spark, input_path)
@@ -194,10 +211,24 @@ def run_pipeline(
             format="parquet",
             connection_url=connection_url,
         )
-        run_logger.info("Pipeline PySpark completado correctamente")
+        rows_per_table = {name: t.count() for name, t in all_tables.items()}
+        total_rows = sum(rows_per_table.values())
+        duration = time.time() - start_time
+        run_logger.info(
+            "Pipeline PySpark completado en %.2f s | Rows processed: %s total (%s)",
+            duration, total_rows, rows_per_table,
+        )
+        log_pipeline_metrics(
+            "pyspark_etl", duration, rows_per_table, "success",
+        )
         return all_tables
     except Exception as e:
-        run_logger.error("Pipeline PySpark fallido: %s", e)
+        duration = time.time() - start_time
+        run_logger.error("Pipeline PySpark fallido tras %.2f s: %s", duration, e)
+        log_pipeline_metrics(
+            "pyspark_etl", duration, 0, "failure",
+            extra={"error": str(e)},
+        )
         raise
 
 

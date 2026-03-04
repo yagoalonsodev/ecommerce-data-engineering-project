@@ -4,12 +4,14 @@ No genera el warehouse final; guarda dataset limpio en data/processed/.
 """
 
 import logging
+import time
 from pathlib import Path
 from typing import Optional
 
 import pandas as pd
 
 from config.logging_config import PANDAS_ETL_LOGGER, get_step_logger, setup_logging
+from config.observability import log_pipeline_metrics
 from config.settings import Settings
 
 
@@ -171,18 +173,35 @@ def run_pipeline(
     output_path = Path(output_path) if output_path is not None else Settings.PATH_PROCESSED_CSV
 
     run_logger.info("Inicio pipeline Pandas: %s -> %s", input_path, output_path)
+    start_time = time.time()
+    rows_in = 0
     try:
         df = load_data(input_path)
+        rows_in = len(df)
         df = clean_data(df)
         df = handle_missing_values(df)
         df = normalize_columns(df)
         df = feature_engineering(df)
         validate_data_quality(df)
         save_processed_data(df, output_path)
-        run_logger.info("Pipeline Pandas completado correctamente")
+        rows_out = len(df)
+        duration = time.time() - start_time
+        run_logger.info(
+            "Pipeline Pandas completado en %.2f s | Rows: input=%s, output=%s",
+            duration, rows_in, rows_out,
+        )
+        log_pipeline_metrics(
+            "pandas_etl", duration, rows_out, "success",
+            extra={"rows_in": rows_in},
+        )
         return df
     except Exception as e:
-        run_logger.error("Pipeline Pandas fallido: %s", e)
+        duration = time.time() - start_time
+        run_logger.error("Pipeline Pandas fallido tras %.2f s: %s", duration, e)
+        log_pipeline_metrics(
+            "pandas_etl", duration, rows_in, "failure",
+            extra={"error": str(e)},
+        )
         raise
 
 

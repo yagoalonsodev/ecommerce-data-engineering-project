@@ -11,9 +11,10 @@ from pathlib import Path
 LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
-# Nombres de loggers por pipeline
+# Nombres de loggers por pipeline / setup
 PANDAS_ETL_LOGGER = "pandas_etl"
 PYSPARK_ETL_LOGGER = "pyspark_etl"
+LOAD_NEON_LOGGER = "load_neon_db"
 
 
 def setup_logging(
