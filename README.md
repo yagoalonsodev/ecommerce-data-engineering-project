@@ -38,7 +38,11 @@ Plataforma de ingeniería de datos end-to-end para análisis eCommerce: pipeline
 
 ---
 
-## Arquitectura
+## 🏗 Arquitectura
+
+<p align="center">
+  <img src="docs/architecture.png" alt="Diagrama de arquitectura" width="900"/>
+</p>
 
 ```
 Raw CSV (~10k registros con inconsistencias)
@@ -68,6 +72,11 @@ Frontend Dashboard
   - Recharts
   - Consumo de API REST
 ```
+
+**Production Deployment:**
+- Frontend → Netlify
+- Backend → Vercel
+- Database → Neon (PostgreSQL)
 
 ---
 
