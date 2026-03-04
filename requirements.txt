@@ -2,6 +2,7 @@
 pandas>=2.0.0
 pyspark>=3.5.0
 
-# Env y DB (Fase 2 - Neon)
 python-dotenv>=1.0.0
 psycopg2-binary>=2.9.0
+
+flask>=3.0.0
