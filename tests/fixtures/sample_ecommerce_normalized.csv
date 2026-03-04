@@ -1,0 +1,3 @@
+order_id,order_date,customer_id,product_id,quantity,unit_price,total_amount,discount,payment_method,order_status,customer_name,customer_gender,customer_age,country,city,customer_email,product_name,category,subcategory,product_brand,delivery_date
+ORD-001,2024-01-15,CUST-001,PROD-001,2,29.99,59.98,0,Card,Delivered,John Doe,M,35,USA,New York,john@example.com,Widget A,Electronics,Gadgets,BrandX,2024-01-20
+ORD-002,2024-01-16,CUST-002,PROD-002,1,99.50,99.50,5,PayPal,Delivered,Jane Smith,F,28,UK,London,jane@example.com,Widget B,Home,Kitchen,BrandY,2024-01-22
