@@ -3,7 +3,10 @@ Lógica de negocio para analytics. Llama a db.run_query(); no contiene SQL en la
 Route → Service → DB. Config vía Settings.get_database_url() en backend.db.
 """
 
-from backend.db import run_query
+try:
+    from backend.db import run_query
+except ImportError:
+    from db import run_query
 
 
 def get_kpis() -> dict:

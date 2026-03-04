@@ -28,3 +28,11 @@ docker-compose exec -d ecommerce-etl bash -c "cd /app && PYTHONPATH=. flask --ap
 pip install -r requirements.txt
 PYTHONPATH=. pytest backend/tests tests/etl -v --cov=backend --cov=data_engineering --cov-report=term-missing
 ```
+
+## Deploy (Netlify + Vercel)
+
+- **Frontend (Netlify):** Base directory `frontend`, Build `npm run build`, Publish `dist`. Variable de entorno:
+  - `VITE_API_BASE` = URL del backend (ej. `https://tu-proyecto.vercel.app`), sin barra final.
+- **Backend (Vercel):** Root directory `backend`, Install `pip install -r requirements.txt`. Variables de entorno:
+  - `DATABASE_URL` = URL de conexión Neon.
+  - `FRONTEND_ORIGIN` = URL del frontend en Netlify (ej. `https://tu-app.netlify.app`) para CORS.

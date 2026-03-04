@@ -4,7 +4,10 @@ Rutas de analytics. Route → Service → DB (arquitectura limpia).
 
 from flask import Blueprint, jsonify, request
 
-import backend.services.analytics_service as analytics_service
+try:
+    import backend.services.analytics_service as analytics_service
+except ImportError:
+    import services.analytics_service as analytics_service
 
 bp = Blueprint("analytics", __name__, url_prefix="/analytics")
 
