@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  API_BASE,
   getKPIs,
   getSalesByDay,
   getTopProducts,
@@ -30,7 +31,12 @@ export default function Dashboard() {
     return (
       <div className="min-h-screen bg-gray-100 p-10">
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-          {error}. Asegúrate de que la API Flask esté en marcha (http://localhost:5001).
+          {error}. Asegúrate de que la API esté disponible
+          {API_BASE ? (
+            <> (API: {API_BASE})</>
+          ) : (
+            <> y que <code>VITE_API_BASE</code> esté configurada en el build.</>
+          )}
         </div>
       </div>
     );

@@ -1,4 +1,7 @@
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5001";
+/** Base URL de la API. En producción solo desde VITE_API_BASE; en dev fallback a local. */
+export const API_BASE =
+  import.meta.env.VITE_API_BASE ||
+  (import.meta.env.DEV ? "http://localhost:5001" : "");
 
 async function get(url) {
   const res = await fetch(`${API_BASE}${url}`);
