@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Servicio opcional: Jupyter Notebook
   jupyter:
@@ -58,27 +56,8 @@ services:
       - ./notebooks:/app/notebooks
       - ./docs:/app/docs
 
-    # Comando por defecto
-    command: >
-      python -c "
-      print('╔════════════════════════════════════════════════════════════╗');
-      print('║   PROYECTO ETL ECOMMERCE - CONTENEDOR INICIADO             ║');
-      print('║   Pandas & PySpark - Modelo Dimensional                   ║');
-      print('╚════════════════════════════════════════════════════════════╝');
-      print('\nComandos disponibles:\n');
-      print('1. Ejecutar ETL con Pandas:');
-      print('   docker-compose exec ecommerce-etl python etl_warehouse.py\n');
-      print('2. Ejecutar ETL con PySpark:');
-      print('   docker-compose exec ecommerce-etl python etl_pyspark.py\n');
-      print('3. Ver consultas del warehouse:');
-      print('   docker-compose exec ecommerce-etl python warehouse/consultas_warehouse.py\n');
-      print('4. Generar resumen ejecutivo:');
-      print('   docker-compose exec ecommerce-etl python resumen_ejecutivo.py\n');
-      print('5. Shell interactivo:');
-      print('   docker-compose exec ecommerce-etl bash\n');
-      print('6. Jupyter Notebook:');
-      print('   Accede a http://localhost:8888\n');
-      "
+    # Comando por defecto: mantener contenedor vivo para poder hacer exec (ETL, Flask, etc.)
+    command: ["sleep", "infinity"]
 
     # Mantener el contenedor ejecutándose
     tty: true
@@ -86,8 +65,9 @@ services:
 
     # Puertos expuestos
     ports:
-      - "8888:8888"  # Jupyter Notebook
-      - "4040:4040"  # Spark UI
+      - "8888:8888"   # Jupyter Notebook
+      - "4040:4040"   # Spark UI
+      - "5001:5000"   # API Flask 
 
     # Red
     networks:

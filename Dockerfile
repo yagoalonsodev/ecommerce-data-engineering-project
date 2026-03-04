@@ -10,14 +10,15 @@ LABEL version="1.0"
 # Configurar el directorio de trabajo
 WORKDIR /app
 
-# Instalar dependencias del sistema necesarias para PySpark
+# Instalar dependencias del sistema necesarias para PySpark (Java 21 en Debian reciente)
 RUN apt-get update && apt-get install -y \
-    openjdk-17-jre-headless \
+    openjdk-21-jre-headless \
     procps \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/lib/jvm/java-21-openjdk-$(dpkg --print-architecture) /usr/lib/jvm/default-java
 
 # Configurar variables de entorno para Java y Spark
-ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64
+ENV JAVA_HOME=/usr/lib/jvm/default-java
 ENV SPARK_HOME=/usr/local/lib/python3.11/site-packages/pyspark
 ENV PATH=$PATH:$JAVA_HOME/bin
 ENV PYSPARK_PYTHON=python3
