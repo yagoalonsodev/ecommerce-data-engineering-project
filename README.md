@@ -15,7 +15,7 @@
 [![Netlify](https://img.shields.io/badge/Netlify-Frontend-00C7B7?logo=netlify&logoColor=white)](https://www.netlify.com/)
 [![Vercel](https://img.shields.io/badge/Vercel-Backend-000000?logo=vercel&logoColor=white)](https://vercel.com/)
 
-Plataforma de análisis eCommerce: ETL con Pandas y PySpark, warehouse en Neon (PostgreSQL), API REST en Flask y dashboard en React.
+Plataforma de ingeniería de datos end-to-end para análisis eCommerce: pipelines ETL con Pandas y PySpark, modelo dimensional en PostgreSQL (Neon), API REST con Flask, dashboard en React, tests con cobertura y CI/CD.
 
 ---
 
@@ -35,6 +35,71 @@ Plataforma de análisis eCommerce: ETL con Pandas y PySpark, warehouse en Neon (
 
 - **Dashboard (producción):** [ecommerce-etl.netlify.app](https://ecommerce-etl.netlify.app)
 - **API (producción):** [ecommerce-data-engineering-project-chi.vercel.app](https://ecommerce-data-engineering-project-chi.vercel.app)
+
+---
+
+## Arquitectura
+
+```
+Raw CSV (~10k registros con inconsistencias)
+        │
+        ▼
+ETL Layer
+  - Pandas (limpieza rápida, validaciones)
+  - PySpark (transformación escalable)
+        │
+        ▼
+Data Warehouse
+  - Neon (PostgreSQL)
+  - Modelo estrella (fact_sales + tablas dim)
+        │
+        ▼
+Backend API
+  - Flask
+  - Arquitectura Route → Service → DB
+  - Validación de parámetros
+  - Manejo de errores (400, 404, 500)
+  - Endpoint /health
+        │
+        ▼
+Frontend Dashboard
+  - React + Vite
+  - Tailwind CSS
+  - Recharts
+  - Consumo de API REST
+```
+
+---
+
+## Decisiones técnicas
+
+| Decisión | Motivo |
+|----------|--------|
+| **Pandas y PySpark** | Pandas para limpieza rápida y validaciones; PySpark para simular un entorno distribuido y escalable. |
+| **Neon (PostgreSQL)** | Base relacional adecuada para modelo dimensional; serverless y fácil de desplegar en producción. |
+| **Route → Service → DB** | Separación de responsabilidades, facilita testing con mocks y escalado a microservicios. |
+| **Tests sin base real** | Tests rápidos, CI independiente del entorno y aislamiento de la lógica de negocio. |
+
+---
+
+## Limitaciones actuales
+
+- No hay autenticación (API pública).
+- No hay paginación real.
+- No hay rate limiting.
+- No hay caching.
+- El ETL no está orquestado automáticamente (se ejecuta manualmente).
+
+---
+
+## Métricas del proyecto
+
+- ~10.000 registros procesados
+- 2 pipelines ETL (Pandas + PySpark)
+- 6 endpoints REST (incl. `/health`)
+- 37+ tests automatizados
+- CI con cobertura (pytest-cov)
+- Deploy en producción (Netlify + Vercel)
 
 ---
 
