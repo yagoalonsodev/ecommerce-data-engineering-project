@@ -1,16 +1,24 @@
 """
 Capa de acceso a datos. Usa Settings.get_database_url(); no hardcodear conexión.
 Route → Service → DB (arquitectura limpia).
+En Vercel (solo carpeta backend) usa os.environ["DATABASE_URL"] si config no existe.
 """
 
+import os
 from typing import Any, Optional
 
-from config.settings import Settings
+def _get_database_url() -> str:
+    """URL de la DB: desde config si existe, si no desde DATABASE_URL (deploy Vercel)."""
+    try:
+        from config.settings import Settings
+        return Settings.get_database_url() or ""
+    except ImportError:
+        return os.environ.get("DATABASE_URL") or ""
 
 
 def get_connection():
     """Devuelve una conexión a la DB usando la URL de config (Neon)."""
-    url = Settings.get_database_url()
+    url = _get_database_url()
     if not url:
         raise ValueError("DATABASE_URL no configurada. Revisa .env")
     try:
