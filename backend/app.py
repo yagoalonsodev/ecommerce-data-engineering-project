@@ -29,6 +29,10 @@ def create_app() -> Flask:
     def index():
         return {"service": "ecommerce-analytics-api", "docs": "/analytics/kpis"}
 
+    @app.get("/health")
+    def health():
+        return {"status": "ok"}
+
     return app
 
 
